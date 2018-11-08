@@ -43,6 +43,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"os"
 )
 
 const (
@@ -65,6 +66,7 @@ type csiProvisioner struct {
 	identity             string
 	volumeNamePrefix     string
 	volumeNameUUIDLength int
+	nodeName             string
 	config               *rest.Config
 }
 
@@ -208,6 +210,8 @@ func NewCSIProvisioner(client kubernetes.Interface,
 	grpcClient *grpc.ClientConn) controller.Provisioner {
 
 	csiClient := csi.NewControllerClient(grpcClient)
+	nodeName := os.Getenv("KUBE_NODE_NAME")
+
 	provisioner := &csiProvisioner{
 		client:               client,
 		grpcClient:           grpcClient,
@@ -216,6 +220,7 @@ func NewCSIProvisioner(client kubernetes.Interface,
 		identity:             identity,
 		volumeNamePrefix:     volumeNamePrefix,
 		volumeNameUUIDLength: volumeNameUUIDLength,
+		nodeName:             nodeName,
 	}
 	return provisioner
 }
@@ -260,6 +265,32 @@ func makeVolumeName(prefix, pvcUID string, volumeNameUUIDLength int) (string, er
 		return "", fmt.Errorf("corrupted PVC object, it is missing UID")
 	}
 	return fmt.Sprintf("%s-%s", prefix, strings.Replace(string(pvcUID), "-", "", -1)[0:volumeNameUUIDLength]), nil
+}
+
+// ShouldProvision returns whether provisioning should be attempted for the given
+// claim.
+func (p *csiProvisioner) ShouldProvision(claim *v1.PersistentVolumeClaim) bool {
+	if len(p.nodeName) != 0 {
+		if host, found := claim.Annotations["kubernetes.io/hostname"]; found {
+			if host == p.nodeName {
+				return true
+			}
+		}
+		return false
+	}
+	return true
+}
+
+func (p *csiProvisioner) ShouldDelete(volume *v1.PersistentVolume) bool {
+	if len(p.nodeName) != 0 {
+		if host, found := volume.Annotations["kubernetes.io/hostname"]; found {
+			if host == p.nodeName {
+				return true
+			}
+		}
+		return false
+	}
+	return true
 }
 
 func (p *csiProvisioner) Provision(options controller.VolumeOptions) (*v1.PersistentVolume, error) {
@@ -363,6 +394,12 @@ func (p *csiProvisioner) Provision(options controller.VolumeOptions) (*v1.Persis
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: share,
+			Annotations: map[string]string{
+				"kubernetes.io/hostname": p.nodeName,
+			},
+			Labels: map[string]string{
+				"kubernetes.io/hostname": p.nodeName,
+			},
 		},
 		Spec: v1.PersistentVolumeSpec{
 			PersistentVolumeReclaimPolicy: options.PersistentVolumeReclaimPolicy,

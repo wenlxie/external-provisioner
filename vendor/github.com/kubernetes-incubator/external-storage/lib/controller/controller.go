@@ -689,6 +689,11 @@ func (ctrl *ProvisionController) shouldDelete(volume *v1.PersistentVolume) bool 
 	}
 	ctrl.failedDeleteStatsMutex.Unlock()
 
+	if qualifier, ok := ctrl.provisioner.(Qualifier); ok {
+		if !qualifier.ShouldDelete(volume) {
+			return false
+		}
+	}
 	// In 1.5+ we delete only if the volume is in state Released. In 1.4 we must
 	// delete if the volume is in state Failed too.
 	if ctrl.kubeVersion.AtLeast(utilversion.MustParseSemantic("v1.5.0")) {

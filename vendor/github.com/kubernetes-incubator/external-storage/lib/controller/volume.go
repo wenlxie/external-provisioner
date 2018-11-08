@@ -45,6 +45,7 @@ type Qualifier interface {
 	// ShouldProvision returns whether provisioning for the claim should
 	// be attempted.
 	ShouldProvision(*v1.PersistentVolumeClaim) bool
+	ShouldDelete (*v1.PersistentVolume) bool
 }
 
 // IgnoredError is the value for Delete to return to indicate that the call has
