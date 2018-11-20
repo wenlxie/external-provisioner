@@ -271,7 +271,7 @@ func makeVolumeName(prefix, pvcUID string, volumeNameUUIDLength int) (string, er
 // claim.
 func (p *csiProvisioner) ShouldProvision(claim *v1.PersistentVolumeClaim) bool {
 	if len(p.nodeName) != 0 {
-		if host, found := claim.Annotations["kubernetes.io/hostname"]; found {
+		if host, found := claim.Annotations["volume.alpha.kubernetes.io/selected-node"]; found {
 			if host == p.nodeName {
 				return true
 			}
